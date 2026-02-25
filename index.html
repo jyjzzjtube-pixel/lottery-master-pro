@@ -92,6 +92,7 @@ select.inp{-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Cs
 .rank-3{background:linear-gradient(135deg,rgba(205,127,50,.12),rgba(205,127,50,.04));border:1px solid rgba(205,127,50,.2)}
 .rank-4,.rank-5{background:var(--card2);border:1px solid var(--border)}
 .rank-0{background:var(--card2);border:1px solid var(--border)}
+.rank-pending{background:linear-gradient(135deg,rgba(0,240,255,.08),rgba(0,240,255,.02));border:1px solid rgba(0,240,255,.2)}
 .rank-text{font-size:1.3rem;font-weight:900;margin-bottom:4px}
 .rank-prize{font-size:.75rem;color:var(--dim)}
 
@@ -846,18 +847,73 @@ function renderRecord(c) {
 
 function renderRecordItem(r, i) {
   const isLotto = r.type === 'lotto';
-  const resultHTML = r.checked && r.result ? `
-    <div class="rank-box ${r.result.cls || ''}" style="padding:8px;margin:6px 0 0">
-      <span style="font-weight:900;font-size:.85rem">${r.result.text}</span>
-      <span style="font-size:.65rem;color:var(--dim);margin-left:6px">${r.result.prize}</span>
-    </div>
-  ` : '';
+
+  let resultHTML = '';
+  if (r.checked && r.result) {
+    if (r.result.rank === -1) {
+      // 미추첨
+      resultHTML = `
+        <div class="rank-box rank-pending" style="padding:10px;margin:8px 0 0">
+          <div style="font-size:.9rem;font-weight:900">⏳ 미추첨</div>
+          <div style="font-size:.65rem;color:var(--dim);margin-top:2px">${r.round}회 아직 추첨 전입니다. 토요일 8:35 MBC 생중계</div>
+        </div>
+      `;
+    } else if (r.result.rank === 0) {
+      // 낙첨
+      resultHTML = `
+        <div style="margin:8px 0 0">
+          ${r.result.drawNumbers ? `
+            <div style="font-size:.62rem;color:var(--dim);margin-bottom:4px">📡 ${r.round}회 당첨번호 (${r.result.drawDate || ''})</div>
+            <div class="rec-balls" style="margin-bottom:6px">
+              ${r.result.drawNumbers.map(n => {
+                const matched = isLotto && r.numbers.includes(n);
+                return `<div class="ball ball-sm" style="background:${matched ? ballStyle(n).bg : '#1a1a2e'};color:${matched ? ballStyle(n).c : '#444'}">${n}</div>`;
+              }).join('')}
+              <span style="color:var(--dim);font-size:.6rem;margin:0 2px">+</span>
+              ${ballHTML(r.result.drawBonus,'sm',true)}
+            </div>
+          ` : ''}
+          <div class="rank-box rank-0" style="padding:8px">
+            <div style="font-size:.85rem;font-weight:900;color:var(--pink)">❌ 낙첨</div>
+            <div style="font-size:.62rem;color:var(--dim);margin-top:2px">일치 번호 없음 — 다음 회차 도전!</div>
+          </div>
+        </div>
+      `;
+    } else {
+      // 당첨 (1~5등)
+      const matchedNums = isLotto ? r.numbers.filter(n => r.result.drawNumbers && r.result.drawNumbers.includes(n)) : [];
+      const bonusMatch = isLotto && r.result.drawBonus && r.numbers.includes(r.result.drawBonus);
+      resultHTML = `
+        <div style="margin:8px 0 0">
+          ${r.result.drawNumbers ? `
+            <div style="font-size:.62rem;color:var(--dim);margin-bottom:4px">📡 ${r.round}회 당첨번호 (${r.result.drawDate || ''})</div>
+            <div class="rec-balls" style="margin-bottom:6px">
+              ${r.result.drawNumbers.map(n => {
+                const matched = r.numbers.includes(n);
+                return `<div class="ball ball-sm" style="background:${ballStyle(n).bg};color:${ballStyle(n).c};${matched ? 'box-shadow:0 0 8px var(--gold);animation:pulse 1s infinite' : 'opacity:.4'}">${n}</div>`;
+              }).join('')}
+              <span style="color:var(--dim);font-size:.6rem;margin:0 2px">+</span>
+              <div class="ball ball-sm" style="background:${bonusMatch ? 'var(--neon)' : '#1a1a2e'};color:${bonusMatch ? '#000' : '#444'};${bonusMatch ? 'animation:pulse 1s infinite' : ''};border:1px solid var(--neon)">${r.result.drawBonus}</div>
+            </div>
+          ` : ''}
+          <div class="rank-box ${r.result.cls}" style="padding:10px">
+            <div class="rank-text">${r.result.text}</div>
+            <div class="rank-prize">${r.result.prize}</div>
+            <div style="font-size:.62rem;color:var(--dim);margin-top:3px">일치: ${matchedNums.length}개${bonusMatch ? ' + 보너스' : ''}</div>
+          </div>
+        </div>
+      `;
+    }
+  }
 
   if (isLotto) {
     return `
       <div class="rec-item" style="animation-delay:${i*0.03}s">
         <div class="rec-meta">
-          <span style="color:var(--gold);font-weight:700">${r.round ? r.round+'회' : '미지정'}</span>
+          <div class="row" style="gap:6px">
+            <span style="color:var(--gold);font-weight:700">${r.round ? r.round+'회' : '미지정'}</span>
+            ${r.checked ? (r.result.rank === -1 ? '<span class="badge badge-neon" style="font-size:.55rem">미추첨</span>' : r.result.rank === 0 ? '<span class="badge badge-pink" style="font-size:.55rem">낙첨</span>' : `<span class="badge badge-green" style="font-size:.55rem">${r.result.text}</span>`) : ''}
+          </div>
           <div class="row" style="gap:4px">
             <span style="color:var(--dim)">${r.date || ''}</span>
             <button class="btn btn-outline" style="padding:3px 8px;font-size:.6rem" onclick="deleteRecord('${r.id}')">✕</button>
@@ -991,19 +1047,31 @@ async function checkAllRecords() {
   const lottoRecs = state.records.filter(r=>r.type==='lotto' && r.round);
   if (!lottoRecs.length) { toast('확인할 로또 기록이 없습니다'); return; }
 
-  toast('🔍 당첨번호 확인중...');
-  let checked = 0;
+  toast('🔍 동행복권 API 조회중...');
+  let checked = 0, pending = 0;
   for (const rec of lottoRecs) {
     const draw = await fetchDraw(rec.round);
     if (draw) {
       rec.result = checkLotto(rec.numbers, draw.numbers, draw.bonus);
+      rec.result.drawNumbers = draw.numbers;
+      rec.result.drawBonus = draw.bonus;
+      rec.result.drawDate = draw.date;
       rec.checked = true;
       checked++;
+    } else {
+      // API에서 데이터 없음 = 미추첨
+      rec.checked = true;
+      rec.result = { rank:-1, text:'⏳ 미추첨', prize:'추첨일까지 대기', cls:'rank-pending' };
+      pending++;
     }
   }
   saveState();
   render();
-  toast(`✅ ${checked}건 당첨확인 완료!`);
+  if (pending > 0) {
+    toast(`✅ ${checked}건 확인 / ⏳ ${pending}건 미추첨`);
+  } else {
+    toast(`✅ ${checked}건 당첨확인 완료!`);
+  }
 }
 
 // ========== TAB: 확인 ==========

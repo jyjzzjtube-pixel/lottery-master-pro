@@ -1495,6 +1495,15 @@ function renderSettings(c) {
           <span style="font-size:.72rem;font-weight:700">${storageSize} KB</span>
         </div>
       </div>
+      <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImportFile(event)">
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <button class="btn btn-sm" onclick="exportBackup()" style="flex:1;background:linear-gradient(135deg,#00b894,#00cec9);color:#000;font-weight:900">
+          💾 데이터 백업
+        </button>
+        <button class="btn btn-sm" onclick="importBackup()" style="flex:1;background:linear-gradient(135deg,#0984e3,#6c5ce7);color:#fff;font-weight:900">
+          📂 데이터 복원
+        </button>
+      </div>
       <button class="btn btn-danger" onclick="resetAllData()" style="width:100%">
         🗑️ 전체 데이터 초기화 (비밀번호 필요)
       </button>
@@ -1622,6 +1631,78 @@ async function testApiConnection() {
       `;
     }
   }
+}
+
+// ========== 설정: 데이터 백업 (JSON 다운로드) ==========
+function exportBackup() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : { records: [], cachedDraws: {} };
+    const backup = {
+      _meta: {
+        app: 'LotteryMasterPro',
+        version: 'V2.1.0',
+        exportedAt: new Date().toISOString(),
+        recordCount: (parsed.records || []).length,
+        cachedCount: Object.keys(parsed.cachedDraws || {}).length,
+      },
+      data: parsed,
+      history: typeof HISTORY !== 'undefined' ? HISTORY : null,
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const today = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `LotteryMasterPro_Backup_${today}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('백업 완료');
+  } catch(e) {
+    toast('백업 실패: ' + e.message);
+  }
+}
+
+// ========== 설정: 데이터 복원 (JSON 업로드) ==========
+function importBackup() {
+  const fileInput = document.getElementById('importFile');
+  if (fileInput) fileInput.click();
+}
+function handleImportFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const json = JSON.parse(ev.target.result);
+      // 백업 파일 구조 검증: 새 포맷(data 키) 또는 기존 raw 포맷
+      let restoreData;
+      if (json.data && (json.data.records || json.data.cachedDraws)) {
+        restoreData = json.data;
+      } else if (json.records || json.cachedDraws) {
+        restoreData = json;
+      } else {
+        toast('올바른 백업 파일이 아닙니다');
+        return;
+      }
+      if (!confirm(`데이터를 복원하시겠습니까?\n구매기록 ${(restoreData.records||[]).length}건, 캐시 ${Object.keys(restoreData.cachedDraws||{}).length}회차`)) return;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        records: restoreData.records || [],
+        cachedDraws: restoreData.cachedDraws || {},
+      }));
+      state.records = restoreData.records || [];
+      state.cachedDraws = restoreData.cachedDraws || {};
+      toast('복원 완료');
+      render();
+    } catch(err) {
+      toast('복원 실패: 파일 형식 오류');
+    }
+  };
+  reader.readAsText(file);
+  // 같은 파일 재선택 허용
+  e.target.value = '';
 }
 
 // ========== 설정: 전체 데이터 초기화 (비밀번호 보호) ==========

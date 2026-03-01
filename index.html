@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>LOTTERY MASTER PRO V2</title>
+<title>LOTTERY MASTER PRO V3.0</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;700;900&family=Space+Mono:wght@700&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -142,7 +142,7 @@ select.inp{-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Cs
 
 <div class="hdr">
   <h1>LOTTERY MASTER PRO</h1>
-  <div class="sub">V2 — 10 FILTER AI ENGINE + 구매기록 + 자동당첨확인</div>
+  <div class="sub">V3.0 — 16 FILTER AI ENGINE + 구매기록 + 자동당첨확인</div>
 </div>
 
 <div class="tabs" id="tabs">
@@ -211,6 +211,7 @@ const formatDate = d => {
   return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
 };
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+const escHTML = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
 // ========== BALL COLORS ==========
 function ballStyle(n) {
@@ -331,7 +332,7 @@ const HISTORY = [
   {r:1111,d:"2024-03-16",n:[5,13,18,25,33,43],b:8},
 ];
 
-// ========== 15-FILTER PRO ENGINE (V2 UPGRADE) ==========
+// ========== 16-FILTER PRO ENGINE (V3 UPGRADE) ==========
 function calcFreq(data) {
   const f = {};
   for (let i=1;i<=45;i++) f[i]=0;
@@ -348,7 +349,8 @@ function calcMovingAvg(data, recentN=10) {
     const recentRate = recent[i] / Math.max(recentN, 1);
     const fullRate = full[i] / Math.max(data.length, 1);
     // 모멘텀 > 1이면 상승 트렌드, < 1이면 하락 트렌드
-    momentum[i] = fullRate > 0 ? recentRate / fullRate : 1;
+    const raw = fullRate > 0 ? recentRate / fullRate : 1;
+    momentum[i] = Math.min(raw, 10); // Infinity 방지: 최대 10으로 제한
   }
   return momentum;
 }
@@ -405,7 +407,7 @@ function smartGenerate(strategy='smart') {
       bestScore = score;
       best = [...nums];
     }
-    if (score >= 11) break; // V2: 15필터 기준 11점 이상이면 최상급
+    if (score >= 11) break; // V3: 16필터 기준 11점 이상이면 최상급
   }
   return best || randomPick();
 }
@@ -1087,7 +1089,7 @@ function renderRecordItem(r, i) {
         <div class="rec-balls">
           ${r.numbers.map(n=>ballHTML(n,'sm')).join('')}
         </div>
-        ${r.memo ? `<div style="font-size:.65rem;color:var(--dim);margin-top:4px">📝 ${r.memo}</div>` : ''}
+        ${r.memo ? `<div style="font-size:.65rem;color:var(--dim);margin-top:4px">📝 ${escHTML(r.memo)}</div>` : ''}
         ${resultHTML}
       </div>
     `;
@@ -1104,7 +1106,7 @@ function renderRecordItem(r, i) {
         <div style="font-family:'Space Mono',monospace;font-size:1.1rem;font-weight:700;margin-top:4px">
           <span style="color:var(--gold)">${r.numbers.group}조</span> ${r.numbers.digits.join('')}
         </div>
-        ${r.memo ? `<div style="font-size:.65rem;color:var(--dim);margin-top:4px">📝 ${r.memo}</div>` : ''}
+        ${r.memo ? `<div style="font-size:.65rem;color:var(--dim);margin-top:4px">📝 ${escHTML(r.memo)}</div>` : ''}
         ${resultHTML}
       </div>
     `;
@@ -1213,9 +1215,15 @@ async function checkAllRecords() {
   if (!lottoRecs.length) { toast('확인할 로또 기록이 없습니다'); return; }
 
   toast('🔍 동행복권 API 조회중...');
-  let checked = 0, pending = 0;
+  let checked = 0, pending = 0, errors = 0;
   for (const rec of lottoRecs) {
-    const draw = await fetchDraw(rec.round);
+    let draw;
+    try {
+      draw = await fetchDraw(rec.round);
+    } catch(e) {
+      errors++;
+      continue;
+    }
     if (draw) {
       rec.result = checkLotto(rec.numbers, draw.numbers, draw.bonus);
       rec.result.drawNumbers = draw.numbers;
@@ -1232,7 +1240,9 @@ async function checkAllRecords() {
   }
   saveState();
   render();
-  if (pending > 0) {
+  if (errors > 0) {
+    toast(`✅ ${checked}건 확인 / ⏳ ${pending}건 미추첨 / ❌ ${errors}건 오류`);
+  } else if (pending > 0) {
     toast(`✅ ${checked}건 확인 / ⏳ ${pending}건 미추첨`);
   } else {
     toast(`✅ ${checked}건 당첨확인 완료!`);
@@ -1251,7 +1261,14 @@ function renderCheck(c) {
       <button class="btn btn-gold" onclick="doCheck()">🔍 당첨 확인</button>
     </div>
     <div id="checkResult"></div>
-    <div class="card anim" style="animation-delay:.1s;margin-top:10px">
+    <div class="card anim" style="animation-delay:.08s;margin-top:10px">
+      <div class="card-title">🎫 연금복권 당첨 확인</div>
+      <div style="padding:10px;background:#0a0a18;border-radius:8px;font-size:.7rem;color:var(--dim);line-height:1.5">
+        ⚠️ 연금복권 720+의 자동 당첨확인 API는 현재 지원되지 않습니다.<br>
+        <a href="https://www.dhlottery.co.kr/gameResult.do?method=win720" target="_blank" rel="noopener" style="color:var(--neon);text-decoration:underline">동행복권 공식 사이트</a>에서 직접 확인해 주세요.
+      </div>
+    </div>
+    <div class="card anim" style="animation-delay:.15s;margin-top:10px">
       <div class="card-title">📡 최신 당첨번호 조회</div>
       <div class="row" style="gap:6px;margin-bottom:8px">
         <input class="inp" type="number" id="fetchRound" value="${getCurrentRound()}" style="flex:1">
@@ -1268,7 +1285,13 @@ async function doCheck() {
   const nums = raw.replace(/[^0-9]/g,' ').trim().split(/\s+/).map(Number).filter(n=>n>=1&&n<=45);
   if (nums.length!==6) { toast('⚠️ 6개 번호를 입력하세요'); return; }
 
-  const draw = await fetchDraw(round);
+  let draw;
+  try {
+    draw = await fetchDraw(round);
+  } catch(e) {
+    toast('⚠️ API 조회 중 오류 발생: ' + (e.message || '네트워크 오류'));
+    return;
+  }
   if (!draw) { toast('⚠️ 해당 회차 데이터를 찾을 수 없습니다'); return; }
 
   const result = checkLotto(nums.sort((a,b)=>a-b), draw.numbers, draw.bonus);
@@ -1302,7 +1325,13 @@ async function doCheck() {
 
 async function doFetch() {
   const round = +document.getElementById('fetchRound').value;
-  const draw = await fetchDraw(round);
+  let draw;
+  try {
+    draw = await fetchDraw(round);
+  } catch(e) {
+    toast('⚠️ API 조회 중 오류 발생: ' + (e.message || '네트워크 오류'));
+    return;
+  }
   const el = document.getElementById('fetchResult');
   if (!draw) {
     el.innerHTML = '<div style="font-size:.75rem;color:var(--pink);padding:8px">❌ 아직 추첨 전이거나 데이터를 가져올 수 없습니다</div>';
@@ -1519,11 +1548,11 @@ function renderSettings(c) {
         </div>
         <div class="row between" style="margin-bottom:4px">
           <span style="font-size:.72rem;color:var(--dim)">버전</span>
-          <span style="font-size:.72rem;font-weight:700">V2.1.0</span>
+          <span style="font-size:.72rem;font-weight:700">V3.0.0</span>
         </div>
         <div class="row between" style="margin-bottom:4px">
           <span style="font-size:.72rem;color:var(--dim)">엔진</span>
-          <span style="font-size:.72rem;font-weight:700">10-Filter AI Engine</span>
+          <span style="font-size:.72rem;font-weight:700">16-Filter AI Engine</span>
         </div>
         <div class="row between" style="margin-bottom:4px">
           <span style="font-size:.72rem;color:var(--dim)">내장 데이터</span>
@@ -1641,7 +1670,7 @@ function exportBackup() {
     const backup = {
       _meta: {
         app: 'LotteryMasterPro',
-        version: 'V2.1.0',
+        version: 'V3.0.0',
         exportedAt: new Date().toISOString(),
         recordCount: (parsed.records || []).length,
         cachedCount: Object.keys(parsed.cachedDraws || {}).length,
@@ -1706,10 +1735,18 @@ function handleImportFile(e) {
 }
 
 // ========== 설정: 전체 데이터 초기화 (비밀번호 보호) ==========
-function resetAllData() {
+async function verifyPassword(input) {
+  const enc = new TextEncoder().encode(input);
+  const hash = await crypto.subtle.digest('SHA-256', enc);
+  const hex = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,'0')).join('');
+  return hex === 'a05265acb51a22ec9655e1cd39e968be4fa8e40c67dd78edb0ea4d44c3c1b8e0';
+}
+
+async function resetAllData() {
   const pw = prompt('전체 데이터를 초기화하려면 비밀번호를 입력하세요:');
   if (pw === null) return; // 취소
-  if (pw !== '0729') {
+  const valid = await verifyPassword(pw);
+  if (!valid) {
     toast('비밀번호가 올바르지 않습니다');
     return;
   }

@@ -32,7 +32,7 @@ input[type=number]{-moz-appearance:textfield}
 /* TABS */
 .tabs{display:flex;background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .tabs::-webkit-scrollbar{display:none}
-.tab{flex:none;padding:12px 0;font-size:.72rem;font-weight:700;color:var(--dim);cursor:pointer;text-align:center;min-width:20%;transition:all .2s;position:relative;white-space:nowrap}
+.tab{flex:none;padding:12px 0;font-size:.72rem;font-weight:700;color:var(--dim);cursor:pointer;text-align:center;min-width:16.66%;transition:all .2s;position:relative;white-space:nowrap}
 .tab.on{color:var(--gold)}
 .tab.on::after{content:'';position:absolute;bottom:0;left:20%;right:20%;height:2px;background:var(--gold);border-radius:2px}
 
@@ -151,6 +151,7 @@ select.inp{-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Cs
   <div class="tab" data-t="check">🔍 확인</div>
   <div class="tab" data-t="stats">📊 통계</div>
   <div class="tab" data-t="history">📜 역대</div>
+  <div class="tab" data-t="settings">⚙️ 설정</div>
 </div>
 
 <div class="wrap" id="content"></div>
@@ -719,6 +720,7 @@ function render() {
     case 'check': renderCheck(c); break;
     case 'stats': renderStats(c); break;
     case 'history': renderHistory(c); break;
+    case 'settings': renderSettings(c); break;
   }
 }
 
@@ -1432,6 +1434,211 @@ function renderHistory(c) {
       🔍 확인 탭에서 API를 통해 실시간 당첨번호를 조회할 수 있습니다.
     </div>
   `;
+}
+
+// ========== TAB: 설정 ==========
+function renderSettings(c) {
+  const recordCount = state.records.length;
+  const lottoCount = state.records.filter(r => r.type === 'lotto').length;
+  const pensionCount = state.records.filter(r => r.type === 'pension').length;
+  const cachedCount = Object.keys(state.cachedDraws).length;
+  const storageSize = (() => {
+    try {
+      const data = localStorage.getItem(STORAGE_KEY);
+      return data ? (new Blob([data]).size / 1024).toFixed(1) : '0';
+    } catch(e) { return '?'; }
+  })();
+
+  c.innerHTML = `
+    <div class="card anim">
+      <div class="card-title">⚙️ 설정</div>
+      <div style="font-size:.7rem;color:var(--dim)">앱 설정 및 데이터 관리</div>
+    </div>
+
+    <!-- API 연결 상태 -->
+    <div class="card anim" style="animation-delay:.05s">
+      <div class="card-title">🌐 동행복권 API 연결 상태</div>
+      <div id="apiStatusArea" style="padding:10px;background:#0a0a18;border-radius:10px;margin-bottom:10px">
+        <div class="row between" style="margin-bottom:6px">
+          <span style="font-size:.72rem;color:var(--dim)">API 엔드포인트</span>
+          <span style="font-size:.62rem;color:var(--neon);word-break:break-all">dhlottery.co.kr</span>
+        </div>
+        <div class="row between" style="margin-bottom:6px">
+          <span style="font-size:.72rem;color:var(--dim)">상태</span>
+          <span id="apiStatusBadge" class="badge badge-gold" style="font-size:.6rem">미확인</span>
+        </div>
+        <div class="row between">
+          <span style="font-size:.72rem;color:var(--dim)">응답시간</span>
+          <span id="apiLatency" style="font-size:.72rem;color:var(--dim)">—</span>
+        </div>
+      </div>
+      <button class="btn btn-outline" onclick="testApiConnection()" style="width:100%">
+        🔍 API 연결 테스트
+      </button>
+      <div id="apiTestResult" style="margin-top:8px"></div>
+    </div>
+
+    <!-- 데이터 관리 -->
+    <div class="card anim" style="animation-delay:.1s">
+      <div class="card-title">💾 데이터 관리</div>
+      <div style="padding:10px;background:#0a0a18;border-radius:10px;margin-bottom:10px">
+        <div class="row between" style="margin-bottom:4px">
+          <span style="font-size:.72rem;color:var(--dim)">구매 기록</span>
+          <span style="font-size:.72rem;font-weight:700">${recordCount}건 <span style="color:var(--dim);font-weight:400">(로또 ${lottoCount} / 연금 ${pensionCount})</span></span>
+        </div>
+        <div class="row between" style="margin-bottom:4px">
+          <span style="font-size:.72rem;color:var(--dim)">캐시된 추첨결과</span>
+          <span style="font-size:.72rem;font-weight:700">${cachedCount}회차</span>
+        </div>
+        <div class="row between">
+          <span style="font-size:.72rem;color:var(--dim)">저장 용량</span>
+          <span style="font-size:.72rem;font-weight:700">${storageSize} KB</span>
+        </div>
+      </div>
+      <button class="btn btn-danger" onclick="resetAllData()" style="width:100%">
+        🗑️ 전체 데이터 초기화 (비밀번호 필요)
+      </button>
+    </div>
+
+    <!-- 앱 정보 -->
+    <div class="card anim" style="animation-delay:.15s">
+      <div class="card-title">ℹ️ 앱 정보</div>
+      <div style="padding:10px;background:#0a0a18;border-radius:10px">
+        <div class="row between" style="margin-bottom:4px">
+          <span style="font-size:.72rem;color:var(--dim)">앱 이름</span>
+          <span style="font-size:.72rem;font-weight:700;color:var(--gold)">LOTTERY MASTER PRO</span>
+        </div>
+        <div class="row between" style="margin-bottom:4px">
+          <span style="font-size:.72rem;color:var(--dim)">버전</span>
+          <span style="font-size:.72rem;font-weight:700">V2.1.0</span>
+        </div>
+        <div class="row between" style="margin-bottom:4px">
+          <span style="font-size:.72rem;color:var(--dim)">엔진</span>
+          <span style="font-size:.72rem;font-weight:700">10-Filter AI Engine</span>
+        </div>
+        <div class="row between" style="margin-bottom:4px">
+          <span style="font-size:.72rem;color:var(--dim)">내장 데이터</span>
+          <span style="font-size:.72rem;font-weight:700">${HISTORY.length}회차 (${HISTORY[HISTORY.length-1].r}~${HISTORY[0].r}회)</span>
+        </div>
+        <div class="row between">
+          <span style="font-size:.72rem;color:var(--dim)">저장 키</span>
+          <span style="font-size:.72rem;font-weight:700;color:var(--neon)">${STORAGE_KEY}</span>
+        </div>
+      </div>
+      <div style="text-align:center;margin-top:12px;font-size:.6rem;color:var(--dim);line-height:1.6">
+        본 앱은 로또 번호 생성 보조 도구이며,<br>
+        당첨을 보장하지 않습니다.<br>
+        복권은 적당히 즐기세요. 🍀
+      </div>
+    </div>
+  `;
+}
+
+// ========== 설정: API 연결 테스트 ==========
+async function testApiConnection() {
+  const badge = document.getElementById('apiStatusBadge');
+  const latency = document.getElementById('apiLatency');
+  const resultEl = document.getElementById('apiTestResult');
+
+  if (!badge || !latency || !resultEl) return;
+
+  badge.className = 'badge badge-gold';
+  badge.textContent = '테스트 중...';
+  latency.textContent = '측정 중...';
+  resultEl.innerHTML = '';
+
+  const testRound = HISTORY[0].r;
+  const startTime = performance.now();
+  const TIMEOUT = 5000;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT);
+    const res = await fetch(API_URL + testRound, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    const elapsed = Math.round(performance.now() - startTime);
+
+    if (!res.ok) {
+      badge.className = 'badge badge-pink';
+      badge.textContent = '오류 (' + res.status + ')';
+      latency.textContent = elapsed + 'ms';
+      resultEl.innerHTML = `
+        <div style="padding:8px;background:rgba(255,62,127,.08);border:1px solid rgba(255,62,127,.2);border-radius:8px;font-size:.7rem;color:var(--pink)">
+          HTTP 오류: ${res.status} ${res.statusText}
+        </div>
+      `;
+      return;
+    }
+
+    const json = await res.json();
+    latency.textContent = elapsed + 'ms';
+
+    if (json.returnValue === 'success') {
+      badge.className = 'badge badge-green';
+      badge.textContent = '정상 연결';
+      const nums = [json.drwtNo1, json.drwtNo2, json.drwtNo3, json.drwtNo4, json.drwtNo5, json.drwtNo6].sort((a,b)=>a-b);
+      resultEl.innerHTML = `
+        <div style="padding:10px;background:rgba(0,230,118,.06);border:1px solid rgba(0,230,118,.15);border-radius:8px">
+          <div style="font-size:.68rem;color:var(--green);font-weight:700;margin-bottom:6px">✅ API 응답 정상 (${testRound}회차)</div>
+          <div class="row center" style="gap:3px">
+            ${nums.map(n => ballHTML(n, 'sm')).join('')}
+            <span style="color:var(--dim);font-size:.6rem;margin:0 2px">+</span>
+            ${ballHTML(json.bnusNo, 'sm', true)}
+          </div>
+          <div style="font-size:.6rem;color:var(--dim);margin-top:6px;text-align:center">
+            추첨일: ${json.drwNoDate} | 응답시간: ${elapsed}ms
+          </div>
+        </div>
+      `;
+    } else {
+      badge.className = 'badge badge-gold';
+      badge.textContent = '응답 이상';
+      resultEl.innerHTML = `
+        <div style="padding:8px;background:rgba(253,184,19,.08);border:1px solid rgba(253,184,19,.15);border-radius:8px;font-size:.7rem;color:var(--gold)">
+          ⚠️ API 응답은 있으나 데이터 없음 (returnValue: ${String(json.returnValue).replace(/</g,'&lt;')})
+        </div>
+      `;
+    }
+  } catch(e) {
+    const elapsed = Math.round(performance.now() - startTime);
+    latency.textContent = elapsed + 'ms';
+
+    if (e.name === 'AbortError') {
+      badge.className = 'badge badge-pink';
+      badge.textContent = '타임아웃';
+      resultEl.innerHTML = `
+        <div style="padding:8px;background:rgba(255,62,127,.08);border:1px solid rgba(255,62,127,.2);border-radius:8px;font-size:.7rem;color:var(--pink)">
+          ⏱️ 연결 시간 초과 (5초). 네트워크 상태를 확인하세요.
+        </div>
+      `;
+    } else {
+      badge.className = 'badge badge-pink';
+      badge.textContent = '연결 실패';
+      resultEl.innerHTML = `
+        <div style="padding:8px;background:rgba(255,62,127,.08);border:1px solid rgba(255,62,127,.2);border-radius:8px;font-size:.7rem;color:var(--pink)">
+          ❌ 연결 실패: ${String(e.message).replace(/</g,'&lt;')}<br>
+          <span style="color:var(--dim);font-size:.6rem">CORS 정책 또는 네트워크 오류일 수 있습니다.</span>
+        </div>
+      `;
+    }
+  }
+}
+
+// ========== 설정: 전체 데이터 초기화 (비밀번호 보호) ==========
+function resetAllData() {
+  const pw = prompt('전체 데이터를 초기화하려면 비밀번호를 입력하세요:');
+  if (pw === null) return; // 취소
+  if (pw !== '0729') {
+    toast('비밀번호가 올바르지 않습니다');
+    return;
+  }
+  if (!confirm('정말로 모든 기록과 캐시 데이터를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) return;
+
+  state.records = [];
+  state.cachedDraws = {};
+  saveState();
+  toast('전체 데이터가 초기화되었습니다');
+  render();
 }
 
 // ========== TAB EVENT ==========
